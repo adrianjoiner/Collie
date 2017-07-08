@@ -11,7 +11,6 @@ Version 0.1
 - Keys are only sent to usb when they are released
 
 TODO:
-- Send SHIFT & HOLD cursor keys
 - Send control keys (GUI Key, Function keys, delete etc)
 - Refactor
 
@@ -123,6 +122,9 @@ Keypad kpd = Keypad(makeKeymap(keys), rowPins, colPins, COLS, ROWS);
 String msg;
 bool shiftEnabled = false;
 bool altEnabled = false;
+bool ctrlPressed = false;
+bool cbmPressed = false;
+bool altPressed = false;
 
 // Arduino method - run before the controller loop starts
 void setup()
@@ -133,12 +135,59 @@ void setup()
 void setModifierStatus(char scannedKey, KeyState state)
 {
     shiftEnabled = (((scannedKey == _LEFT_SHIFT) || (scannedKey == _RIGHT_SHIFT)) && ((state == PRESSED) || (state == HOLD)));
-    altEnabled = ((scannedKey == _RUN_STOP) && ((state == PRESSED) || (state == HOLD)));
+
+    // We use Alt has a shift hold key for cursor movement
+    if (scannedKey == _RUN_STOP)
+    {
+        if (state == PRESSED)
+        {
+            altEnabled = true;
+            Keyboard.press(KEY_LEFT_SHIFT);
+            delay(90);
+        }
+        else if (state == RELEASED)
+        {
+            Keyboard.release(KEY_LEFT_SHIFT);
+            altEnabled = false;
+        }
+    }
+
+    if(scannedKey == _CBM){
+        if (state == PRESSED)
+        {
+            cbmPressed = true;
+            Serial.println("GUI Pressed");
+            Keyboard.press(KEY_LEFT_GUI);
+            delay(90);
+
+        }
+        else if (state == RELEASED)
+        {
+            Serial.println("GUI released");
+            Keyboard.release(KEY_LEFT_GUI);
+            delay(100);
+        }
+    }
+
+    if(scannedKey == _CONTROL){
+        if (state == PRESSED)
+        {
+            Serial.println("CTRL Pressed");
+            Keyboard.press(KEY_RIGHT_CTRL);
+            delay(90);
+        }
+        else if (state == RELEASED)
+        {
+            Serial.println("CTRL released");
+            Keyboard.release(KEY_RIGHT_CTRL);
+            delay(100);
+        }
+    }
 }
 
 bool IsModifierKey(char scannedKey)
 {
-    return (scannedKey == _RIGHT_SHIFT || scannedKey == _LEFT_SHIFT || scannedKey == _RUN_STOP);
+    return (scannedKey == _RIGHT_SHIFT || scannedKey == _LEFT_SHIFT || scannedKey == _RUN_STOP || scannedKey == _CONTROL || scannedKey == _CBM) || scannedKey == _HOME;
 }
 
 bool IsAlphanumericKey(char scannedKey)
