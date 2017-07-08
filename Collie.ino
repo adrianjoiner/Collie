@@ -11,7 +11,6 @@ Version 0.1
 - Keys are only sent to usb when they are released
 
 TODO:
-- Send cursor keys
 - Send SHIFT & HOLD cursor keys
 - Send control keys (GUI Key, Function keys, delete etc)
 - Refactor
@@ -104,7 +103,6 @@ const char _CBM = 20;
 const char _HOME = 24;
 const char _POUND = 9;
 
-
 // Physical keyboard mapping
 char keys[ROWS][COLS] = {
     _LEFT_ARROW, 'w', 'r', 'y', 'i', 'p', '*', _RETURN,               // COLA
@@ -125,7 +123,6 @@ Keypad kpd = Keypad(makeKeymap(keys), rowPins, colPins, COLS, ROWS);
 String msg;
 bool shiftEnabled = false;
 bool altEnabled = false;
-
 
 // Arduino method - run before the controller loop starts
 void setup()
@@ -161,24 +158,36 @@ bool IsControlKey(char scannedKey)
 
 void SendCursoKey(char _cursorKey)
 {
-    if (_cursorKey == _LEFT_RIGHT_CURSOR)
+    // nb Keyboard.print() doesn't work with cursor keys. need to press and release
+    if (shiftEnabled)
     {
-        Keyboard.print(KEY_LEFT_ARROW);
+        if (_cursorKey == _LEFT_RIGHT_CURSOR)
+        {
+            Keyboard.press(KEY_RIGHT_ARROW);
+            delay(90);
+            Keyboard.release(KEY_RIGHT_ARROW);
+        }
+        else
+        {
+            Keyboard.press(KEY_DOWN_ARROW);
+            delay(90);
+            Keyboard.release(KEY_DOWN_ARROW);
+        }
     }
-
-    if ((_cursorKey == _LEFT_RIGHT_CURSOR) && shiftEnabled)
+    else
     {
-        Keyboard.print(KEY_RIGHT_ARROW);
-    }
-
-    if (_cursorKey == _UP_DOWN_CURSOR)
-    {
-        Keyboard.print(KEY_UP_ARROW);
-    }
-
-    if ((_cursorKey == _UP_DOWN_CURSOR) && shiftEnabled)
-    {
-        Keyboard.print(KEY_DOWN_ARROW);
+        if (_cursorKey == _LEFT_RIGHT_CURSOR)
+        {
+            Keyboard.press(KEY_LEFT_ARROW);
+            delay(90);
+            Keyboard.release(KEY_LEFT_ARROW);
+        }
+        else if (_cursorKey == _UP_DOWN_CURSOR)
+        {
+            Keyboard.press(KEY_UP_ARROW);
+            delay(90);
+            Keyboard.release(KEY_UP_ARROW);
+        }
     }
 }
 
@@ -263,12 +272,12 @@ char trueKey(char scannedKey)
     }
 
     // Non standard keys
-        switch (scannedKey)
-        {
-            case _POUND:
-                modifiedKey = '£';
-                break;
-        }
+    switch (scannedKey)
+    {
+    case _POUND:
+        modifiedKey = '£';
+        break;
+    }
 
     // alt shifted keys (where no matching key on keyboard)
     if (altEnabled)
@@ -317,14 +326,13 @@ void loop()
                     {
                         Keyboard.print(trueKey(kpd.key[i].kchar));
                     }
-                    else if (kpd.key[i].kchar == _RETURN) 
+                    else if (kpd.key[i].kchar == _RETURN)
                     {
                         Keyboard.println("");
                     }
-                    else 
+                    else if (IsCursorKey(kpd.key[i].kchar))
                     {
-                        Serial.print("Unknown key ");
-                        Serial.println((int)kpd.key[i].kchar);
+                        SendCursoKey(kpd.key[i].kchar);
                     }
                 }
             }
