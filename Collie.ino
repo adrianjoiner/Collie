@@ -10,11 +10,6 @@ Version 0.1
 - No control keys are sent to the USB port (except RETURN)
 - Keys are only sent to usb when they are released
 
-TODO:
-- Send control keys (GUI Key, Function keys, delete etc)
-- Refactor
-
-
 Acknowledements / References
 ============================
 https://www.arduino.cc/en/Reference/MouseKeyboard
