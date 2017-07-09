@@ -3,16 +3,13 @@
 
 /*
 
-Version 0.1
+Version 1.0
 =========
 - VIC20 / CBM64 keyboard simulation
-- Sends all shifted / non shifted alphanumeric keys
-- No control keys are sent to the USB port (except RETURN)
-- Keys are only sent to usb when they are released
 
 TODO:
-- Send control keys (GUI Key, Function keys, delete etc)
-- Refactor
+- Add support for hot keyboard switching
+- Find a use for the RESTORE key
 
 
 Acknowledements / References
@@ -53,6 +50,10 @@ in the options whever you want it to or not.
 Only way to avoid actually getting the char you send to the port is to select the US Keyboad
 */
 
+const int OSX = 1;
+const int WINDOWS = 2;
+int KeyboardEmulationMode = OSX;
+
 #define INPUT_PIN0 PIN_B0 // Teensy pin 0
 #define INPUT_PIN1 PIN_B1 // pin 1
 #define INPUT_PIN2 PIN_B2 // pin 1
@@ -70,6 +71,8 @@ Only way to avoid actually getting the char you send to the port is to select th
 #define OUTPUT_PIN5 PIN_B6 // Pin 15
 #define OUTPUT_PIN6 PIN_B5 // Pin 14
 #define OUTPUT_PIN7 PIN_B4 // Pin 13
+
+#define DEFAULT_KEY_DELAY 90
 
 // CBM keyboard based on an 8 x 8 matrix
 const byte ROWS = 8;
@@ -119,12 +122,11 @@ byte colPins[COLS] = {OUTPUT_PIN0, OUTPUT_PIN1, OUTPUT_PIN2, OUTPUT_PIN3, OUTPUT
 
 Keypad kpd = Keypad(makeKeymap(keys), rowPins, colPins, COLS, ROWS);
 
-String msg;
 bool shiftEnabled = false;
 bool altEnabled = false;
-bool ctrlPressed = false;
-bool cbmPressed = false;
-bool altPressed = false;
+bool ctrlEnabled = false;
+bool cbmEnabled = false;
+bool controlSent = false;
 
 // Arduino method - run before the controller loop starts
 void setup()
@@ -132,59 +134,68 @@ void setup()
     Keyboard.begin();
 }
 
-void setModifierStatus(char scannedKey, KeyState state)
+// Main Arduino controller loop
+void loop()
 {
-    shiftEnabled = (((scannedKey == _LEFT_SHIFT) || (scannedKey == _RIGHT_SHIFT)) && ((state == PRESSED) || (state == HOLD)));
-
-    // We use Alt has a shift hold key for cursor movement
-    if (scannedKey == _RUN_STOP)
+    // Fills kpd.key[ ] array with up-to 10 active keys.
+    // Returns true if there are ANY active keys.
+    if (kpd.getKeys())
     {
-        if (state == PRESSED)
+        for (int i = 0; i < LIST_MAX; i++) // Scan the whole key list.
         {
-            altEnabled = true;
-            Keyboard.press(KEY_LEFT_SHIFT);
-            delay(90);
-        }
-        else if (state == RELEASED)
-        {
-            Keyboard.release(KEY_LEFT_SHIFT);
-            altEnabled = false;
+            // Possible states are : IDLE, PRESSED, HOLD, or RELEASED
+            if (kpd.key[i].stateChanged) // Only find keys that have changed state.
+            {
+                if (IsModifierKey(kpd.key[i].kchar))
+                {
+                    setModifierStatus(kpd.key[i].kchar, kpd.key[i].kstate);
+                }
+
+                if ((kpd.key[i].kstate == PRESSED) && (IsAlphanumericKey(kpd.key[i].kchar)) && ctrlEnabled && !controlSent)
+                {
+                    controlSent = SendControlKeyCombinations(kpd.key[i].kchar);
+                    if (controlSent)
+                    {
+                        WaitForKeyPress();
+                        controlSent = false;
+                    }
+                }
+                else if (kpd.key[i].kstate == RELEASED)
+                {
+                    if (IsAlphanumericKey(kpd.key[i].kchar))
+                    {
+                        Keyboard.print(trueKey(kpd.key[i].kchar));
+                    }
+                    else if (kpd.key[i].kchar == _RETURN)
+                    {
+                        Keyboard.println("");
+                    }
+                    else if (IsCursorKey(kpd.key[i].kchar))
+                    {
+                        SendCursorKey(kpd.key[i].kchar);
+                    }
+                    else if (kpd.key[i].kchar == _INSERT_DELETE)
+                    {
+                        SendDelete(kpd.key[i].kchar);
+                    }
+                    else if (kpd.key[i].kchar == _POUND)
+                    {
+                        SendPoundSign();
+                    }
+                    else if (IsFunctionKey(kpd.key[i].kchar))
+                    {
+                        SendFunctionKey(kpd.key[i].kchar);
+                    }
+                }
+            }
         }
     }
-
-    if(scannedKey == _CBM){
-        if (state == PRESSED)
-        {
-            cbmPressed = true;
-            Serial.println("GUI Pressed");
-            Keyboard.press(KEY_LEFT_GUI);
-            delay(90);
-
-        }
-        else if (state == RELEASED)
-        {
-            Serial.println("GUI released");
-            Keyboard.release(KEY_LEFT_GUI);
-            delay(100);
-        }
-    }
-
-    if(scannedKey == _CONTROL){
-        if (state == PRESSED)
-        {
-            Serial.println("CTRL Pressed");
-            Keyboard.press(KEY_RIGHT_CTRL);
-            delay(90);
-        }
-        else if (state == RELEASED)
-        {
-            Serial.println("CTRL released");
-            Keyboard.release(KEY_RIGHT_CTRL);
-            delay(100);
-        }
-    }
+    // controlSent = false;
 }
 
+/*
+    Helper functions
+*/
 bool IsModifierKey(char scannedKey)
 {
     return (scannedKey == _RIGHT_SHIFT || scannedKey == _LEFT_SHIFT || scannedKey == _RUN_STOP || scannedKey == _CONTROL || scannedKey == _CBM) || scannedKey == _HOME;
@@ -205,37 +216,31 @@ bool IsControlKey(char scannedKey)
     return (scannedKey == _RETURN || scannedKey == _INSERT_DELETE || scannedKey == _CONTROL || scannedKey == _LEFT_RIGHT_CURSOR || scannedKey == _RUN_STOP || scannedKey == _LEFT_SHIFT || scannedKey == _UP_DOWN_CURSOR || scannedKey == _RIGHT_SHIFT || scannedKey == _CBM || scannedKey == _HOME);
 }
 
-void SendCursoKey(char _cursorKey)
+bool IsNonStandard(char scannedKey)
 {
-    // nb Keyboard.print() doesn't work with cursor keys. need to press and release
-    if (shiftEnabled)
+    return (scannedKey == _F1 || scannedKey == _F3 || scannedKey == _F5 || scannedKey == _F7 || scannedKey == _POUND);
+}
+
+bool IsFunctionKey(char scannedKey)
+{
+    return (scannedKey == _F1 || scannedKey == _F3 || scannedKey == _F5 || scannedKey == _F7);
+}
+
+void WaitForKeyPress()
+{
+    bool _keyPressed = false;
+    while (!_keyPressed)
     {
-        if (_cursorKey == _LEFT_RIGHT_CURSOR)
+        kpd.getKeys();
+        for (int i = 0; i < LIST_MAX; i++) // Scan the whole key list.
         {
-            Keyboard.press(KEY_RIGHT_ARROW);
-            delay(90);
-            Keyboard.release(KEY_RIGHT_ARROW);
-        }
-        else
-        {
-            Keyboard.press(KEY_DOWN_ARROW);
-            delay(90);
-            Keyboard.release(KEY_DOWN_ARROW);
-        }
-    }
-    else
-    {
-        if (_cursorKey == _LEFT_RIGHT_CURSOR)
-        {
-            Keyboard.press(KEY_LEFT_ARROW);
-            delay(90);
-            Keyboard.release(KEY_LEFT_ARROW);
-        }
-        else if (_cursorKey == _UP_DOWN_CURSOR)
-        {
-            Keyboard.press(KEY_UP_ARROW);
-            delay(90);
-            Keyboard.release(KEY_UP_ARROW);
+            if (kpd.key[i].stateChanged)
+            {
+                if (kpd.key[i].kstate == PRESSED)
+                {
+                    _keyPressed = true;
+                }
+            }
         }
     }
 }
@@ -300,32 +305,12 @@ char trueKey(char scannedKey)
         case '.':
             modifiedKey = '>';
             break;
-        case _F1:
-            modifiedKey = _F2;
-            break;
-        case _F3:
-            modifiedKey = _F4;
-            break;
-        case _F5:
-            modifiedKey = _F6;
-            break;
-        case _F7:
-            modifiedKey = _F8;
-            break;
         case _INSERT_DELETE:
             modifiedKey = _DELETE;
             break;
         case '/':
             modifiedKey = '?';
         }
-    }
-
-    // Non standard keys
-    switch (scannedKey)
-    {
-    case _POUND:
-        modifiedKey = '£';
-        break;
     }
 
     // alt shifted keys (where no matching key on keyboard)
@@ -350,41 +335,238 @@ char trueKey(char scannedKey)
     return modifiedKey;
 }
 
-// Main Arduino controller loop
-void loop()
+void setModifierStatus(char scannedKey, KeyState state)
 {
-    // Fills kpd.key[ ] array with up-to 10 active keys.
-    // Returns true if there are ANY active keys.
-    if (kpd.getKeys())
+    shiftEnabled = (((scannedKey == _LEFT_SHIFT) || (scannedKey == _RIGHT_SHIFT)) && ((state == PRESSED) || (state == HOLD)));
+
+    // We use Alt has a shift hold key for cursor movement
+    if (scannedKey == _RUN_STOP)
     {
-        for (int i = 0; i < LIST_MAX; i++) // Scan the whole key list.
+        if (state == PRESSED)
         {
-            if (kpd.key[i].stateChanged) // Only find keys that have changed state.
-            {
-                char keyToSend = ' ';
-
-                if (IsModifierKey(kpd.key[i].kchar))
-                {
-                    setModifierStatus(kpd.key[i].kchar, kpd.key[i].kstate);
-                }
-
-                if (kpd.key[i].kstate == RELEASED)
-                {
-                    // Possible states are : IDLE, PRESSED, HOLD, or RELEASED
-                    if (IsAlphanumericKey(kpd.key[i].kchar) || kpd.key[i].kchar == _POUND)
-                    {
-                        Keyboard.print(trueKey(kpd.key[i].kchar));
-                    }
-                    else if (kpd.key[i].kchar == _RETURN)
-                    {
-                        Keyboard.println("");
-                    }
-                    else if (IsCursorKey(kpd.key[i].kchar))
-                    {
-                        SendCursoKey(kpd.key[i].kchar);
-                    }
-                }
-            }
+            altEnabled = true;
+            Keyboard.press(KEY_LEFT_SHIFT);
+            delay(DEFAULT_KEY_DELAY);
+        }
+        else if (state == RELEASED)
+        {
+            Keyboard.release(KEY_LEFT_SHIFT);
+            altEnabled = false;
         }
     }
+
+    if(scannedKey == _CBM){
+        if (state == PRESSED)
+        {
+            cbmEnabled = true;
+            Keyboard.press(KEY_LEFT_GUI);
+            delay(DEFAULT_KEY_DELAY);
+
+        }
+        else if (state == RELEASED)
+        {
+            cbmEnabled = false;
+            Keyboard.release(KEY_LEFT_GUI);
+            delay(DEFAULT_KEY_DELAY);
+        }
+    }
+
+    if(scannedKey == _CONTROL){
+        if (state == PRESSED)
+        {
+            ctrlEnabled = true;
+            Keyboard.press(KEY_RIGHT_CTRL);
+            delay(DEFAULT_KEY_DELAY);
+        }
+        else if (state == RELEASED)
+        {
+            Keyboard.release(KEY_RIGHT_CTRL);
+            delay(DEFAULT_KEY_DELAY);
+            ctrlEnabled = false;
+        }
+    }
+}
+
+/*
+    Custom key send functions
+*/
+void SendCursorKey(char _cursorKey)
+{
+    // nb Keyboard.print() doesn't work with cursor keys. need to press and release
+    if (shiftEnabled)
+    {
+        if (_cursorKey == _LEFT_RIGHT_CURSOR)
+        {
+            Keyboard.press(KEY_RIGHT_ARROW);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_RIGHT_ARROW);
+        }
+        else
+        {
+            Keyboard.press(KEY_DOWN_ARROW);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_DOWN_ARROW);
+        }
+    }
+    else
+    {
+        if (_cursorKey == _LEFT_RIGHT_CURSOR)
+        {
+            Keyboard.press(KEY_LEFT_ARROW);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_LEFT_ARROW);
+        }
+        else if (_cursorKey == _UP_DOWN_CURSOR)
+        {
+            Keyboard.press(KEY_UP_ARROW);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_UP_ARROW);
+        }
+    }
+}
+
+void SendFunctionKey(char funcKey)
+{
+    if (shiftEnabled)
+    {
+        switch (funcKey)
+        {
+        case _F1:
+            Keyboard.press(KEY_F2);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_F2);
+            break;
+        case _F3:
+            Keyboard.press(KEY_F4);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_F4);
+            break;
+        case _F5:
+            Keyboard.press(KEY_F6);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_F6);
+            break;
+        case _F7:
+            Keyboard.press(KEY_F8);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_F8);
+            break;
+        }
+    }
+    else
+    {
+        switch (funcKey)
+        {
+        case _F1:
+            Keyboard.press(KEY_F1);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_F1);
+            break;
+        case _F3:
+            Keyboard.press(KEY_F3);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_F3);
+            break;
+        case _F5:
+            Keyboard.press(KEY_F5);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_F5);
+            break;
+        case _F7:
+            Keyboard.press(KEY_F7);
+            delay(DEFAULT_KEY_DELAY);
+            Keyboard.release(KEY_F7);
+            break;
+        }
+    }
+}
+void SendPoundSign()
+{
+    switch (KeyboardEmulationMode)
+    {
+    case WINDOWS:
+        Keyboard.press(KEY_RIGHT_ALT);
+        Keyboard.press('0');
+        delay(DEFAULT_KEY_DELAY);
+        Keyboard.release('0');
+        Keyboard.press('1');
+        delay(DEFAULT_KEY_DELAY);
+        Keyboard.release('1');
+        Keyboard.press('6');
+        delay(DEFAULT_KEY_DELAY);
+        Keyboard.release('6');
+        Keyboard.press('3');
+        delay(DEFAULT_KEY_DELAY);
+        Keyboard.release('3');
+        Keyboard.release(KEY_RIGHT_ALT);
+        break;
+
+    case OSX:
+        Keyboard.press(KEY_RIGHT_ALT);
+        Keyboard.press('3');
+        delay(DEFAULT_KEY_DELAY);
+        Keyboard.release('3');
+        Keyboard.release(KEY_RIGHT_ALT);
+        break;
+    }
+}
+
+void SendDelete(char scannedKey)
+{
+    if (shiftEnabled)
+    {
+        Keyboard.press(KEY_DELETE);
+        delay(DEFAULT_KEY_DELAY);
+        Keyboard.release(KEY_DELETE);
+    }
+    else
+    {
+        Keyboard.press(KEY_BACKSPACE);
+        delay(DEFAULT_KEY_DELAY);
+        Keyboard.release(KEY_BACKSPACE);
+    }
+}
+
+bool SendControlKeyCombinations(char scannedKey)
+{
+    switch (scannedKey)
+    {
+    case 'a':
+        SendAsControl(scannedKey);
+        break;
+    case 'c':
+        SendAsControl(scannedKey);
+        break;
+    case 'v':
+        SendAsControl(scannedKey);
+        break;
+    }
+
+    return controlSent;
+}
+
+void SendAsControl(char _key)
+{
+
+    // not using compiler options to switch as will add as a macro later
+    Keyboard.releaseAll();
+    if (KeyboardEmulationMode == OSX)
+    {
+        Keyboard.press(KEY_LEFT_GUI);
+        Keyboard.press(_key);
+        delay(DEFAULT_KEY_DELAY);
+        Keyboard.release(_key);
+        Keyboard.release(KEY_LEFT_GUI);
+    }
+    else
+    {
+        Keyboard.press(KEY_RIGHT_CTRL);
+        Keyboard.press(_key);
+        delay(DEFAULT_KEY_DELAY);
+        Keyboard.release(_key);
+        Keyboard.release(KEY_RIGHT_CTRL);
+    }
+
+    controlSent = true;
+    ctrlEnabled = false;
 }
