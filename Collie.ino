@@ -71,6 +71,8 @@ Only way to avoid actually getting the char you send to the port is to select th
 #define OUTPUT_PIN6 PIN_B5 // Pin 14
 #define OUTPUT_PIN7 PIN_B4 // Pin 13
 
+#define DEFAULT_KEY_DELAY 100
+
 // CBM keyboard based on an 8 x 8 matrix
 const byte ROWS = 8;
 const byte COLS = 8;
