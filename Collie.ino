@@ -48,6 +48,10 @@ in the options whever you want it to or not.
 Only way to avoid actually getting the char you send to the port is to select the US Keyboad
 */
 
+#define OSX 1
+#define WINDOWS 2
+byte KeyboardEmulationMode = OSX;
+
 #define INPUT_PIN0 PIN_B0 // Teensy pin 0
 #define INPUT_PIN1 PIN_B1 // pin 1
 #define INPUT_PIN2 PIN_B2 // pin 1
