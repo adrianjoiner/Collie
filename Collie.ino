@@ -54,8 +54,8 @@ const int OSX = 1;
 const int WINDOWS = 2;
 int KeyboardEmulationMode = OSX;
 
-#define INPUT_PIN0 PIN_B0 // Teensy pin 0
-#define INPUT_PIN1 PIN_B1 // pin 1
+#define INPUT_PIN0 PIN_B1 // Teensy pin 0
+#define INPUT_PIN1 PIN_B0 // pin 1
 #define INPUT_PIN2 PIN_B2 // pin 1
 #define INPUT_PIN3 PIN_B3 // pin 1
 #define INPUT_PIN4 PIN_B7 // pin 1
