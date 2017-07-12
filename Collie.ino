@@ -11,7 +11,6 @@ TODO:
 - Add support for hot keyboard switching
 - Find a use for the RESTORE key
 
-
 Acknowledements / References
 ============================
 https://www.arduino.cc/en/Reference/MouseKeyboard
@@ -52,7 +51,7 @@ Only way to avoid actually getting the char you send to the port is to select th
 
 const int OSX = 1;
 const int WINDOWS = 2;
-int KeyboardEmulationMode = OSX;
+int KeyboardEmulationMode = WINDOWS;
 
 #define INPUT_PIN0 PIN_B1 // Teensy pin 0
 #define INPUT_PIN1 PIN_B0 // pin 1
@@ -71,39 +70,41 @@ int KeyboardEmulationMode = OSX;
 #define OUTPUT_PIN5 PIN_B6 // Pin 15
 #define OUTPUT_PIN6 PIN_B5 // Pin 14
 #define OUTPUT_PIN7 PIN_B4 // Pin 13
+#define SHIT_TO_UPPER_CASE 0x20
+#define SINGLE_QUOTE 0x27
 
-#define DEFAULT_KEY_DELAY 90
+#define DEFAULT_KEY_DELAY 0x5A
 
 // CBM keyboard based on an 8 x 8 matrix
 const byte ROWS = 8;
 const byte COLS = 8;
 
 // Control keys
-const char _DELETE = 5;
-const char _RIGHT_ARROW = 8;
-const char _UP_ARROW = 7;
-const char _DOWN_ARROW = 6;
-const char _LEFT_ARROW = 10;
-const char _RETURN = 11;
-const char _INSERT_DELETE = 12; // Mapped to Delete key
-const char _CONTROL = 13;
-const char _LEFT_RIGHT_CURSOR = 14;
-const char _RUN_STOP = 15; // runstop = ALT_LEFT for modifier purpurposes
-const char _RIGHT_ALT = 15;
-const char _LEFT_SHIFT = 16;
-const char _UP_DOWN_CURSOR = 17;
-const char _RIGHT_SHIFT = 18;
-const char _F1 = 19;
-const char _F2 = 26;
-const char _F3 = 21;
-const char _F4 = 27;
-const char _F5 = 23;
-const char _F6 = 28;
-const char _F7 = 25;
-const char _F8 = 29;
-const char _CBM = 20;
-const char _HOME = 24;
-const char _POUND = 9;
+const char _DELETE = 0x05;
+const char _RIGHT_ARROW = 0x08;
+const char _UP_ARROW = 0x07;
+const char _DOWN_ARROW = 0x06;
+const char _LEFT_ARROW = 0x0A;
+const char _RETURN = 0x0B;
+const char _INSERT_DELETE = 0x0C; // Mapped to Delete key
+const char _CONTROL = 0x0D;
+const char _LEFT_RIGHT_CURSOR = 0xE;
+const char _RUN_STOP = 0x0F; // runstop = ALT_LEFT for modifier purpurposes
+const char _RIGHT_ALT = 0x0F;
+const char _LEFT_SHIFT = 0x10;
+const char _UP_DOWN_CURSOR = 0x11;
+const char _RIGHT_SHIFT = 0x12;
+const char _F1 = 0x13;
+const char _F2 = 0x14;
+const char _F3 = 0x15;
+const char _F4 = 0x1B;
+const char _F5 = 0x17;
+const char _F6 = 0x1C;
+const char _F7 = 0x19;
+const char _F8 = 0x1D;
+const char _CBM = 0x14;
+const char _HOME = 0x18;
+const char _POUND = 0x09;
 
 // Physical keyboard mapping
 char keys[ROWS][COLS] = {
@@ -190,8 +191,7 @@ void loop()
             }
         }
     }
-    // controlSent = false;
-}
+
 
 /*
     Helper functions
@@ -254,7 +254,7 @@ char trueKey(char scannedKey)
         // If key alpha, convert to upper case
         if ((scannedKey >= 'a') && (scannedKey <= 'z'))
         {
-            modifiedKey = scannedKey - 32;
+            modifiedKey = scannedKey - SHIFT_TO_UPPER_CASE;
         }
 
         // Convert non standard / non alpha to shifted version
@@ -268,9 +268,6 @@ char trueKey(char scannedKey)
             break;
         case '|':
             modifiedKey = '^';
-            break;
-        case '-':
-            modifiedKey = 126;
             break;
         case '1':
             modifiedKey = '!';
@@ -291,7 +288,7 @@ char trueKey(char scannedKey)
             modifiedKey = '&';
             break;
         case '7':
-            modifiedKey = 39;
+            modifiedKey = SINGLE_QUOTE;
             break;
         case '8':
             modifiedKey = '(';
@@ -310,6 +307,9 @@ char trueKey(char scannedKey)
             break;
         case '/':
             modifiedKey = '?';
+            break;
+        case '-':
+            modifiedKey = '_';
         }
     }
 
@@ -329,6 +329,9 @@ char trueKey(char scannedKey)
             break;
         case ';':
             modifiedKey = '}';
+            break;
+        case '-':
+            modifiedKey = '~';
             break;
         }
     }
@@ -529,19 +532,9 @@ void SendDelete(char scannedKey)
 
 bool SendControlKeyCombinations(char scannedKey)
 {
-    switch (scannedKey)
-    {
-    case 'a':
+    if((scannedKey >= 'a') && (scannedKey <= 'z')){
         SendAsControl(scannedKey);
-        break;
-    case 'c':
-        SendAsControl(scannedKey);
-        break;
-    case 'v':
-        SendAsControl(scannedKey);
-        break;
     }
-
     return controlSent;
 }
 
