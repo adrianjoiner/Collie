@@ -13,7 +13,7 @@ Just want to start? Here goes.
 * Connect the C64 keyboard wiring harnes to a Teensy 2.0 as per the fritzing layout
 * Connect the Teensy to your development computer via USB
 * Install the [Arduino IDE](https://www.arduino.cc/en/Main/Software) 
-* Install the [Teensyduino plugin] (https://www.pjrc.com/teensy/td_download.html)
+* Install the [Teensyduino plugin](https://www.pjrc.com/teensy/td_download.html)
 * Copy the sketch.ino file from here to a new Arduino sketch
 * In Arduino IDE drop down, select board type - Teensy 2.0 - and Mouse + Keyboard
 * Build and upload you sketch.
