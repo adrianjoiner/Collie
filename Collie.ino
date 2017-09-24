@@ -51,7 +51,7 @@ Only way to avoid actually getting the char you send to the port is to select th
 
 const int OSX = 1;
 const int WINDOWS = 2;
-int KeyboardEmulationMode = WINDOWS;
+int KeyboardEmulationMode = OSX;
 
 #define INPUT_PIN0 PIN_B1 // Teensy pin 0
 #define INPUT_PIN1 PIN_B0 // pin 1
@@ -70,7 +70,7 @@ int KeyboardEmulationMode = WINDOWS;
 #define OUTPUT_PIN5 PIN_B6 // Pin 15
 #define OUTPUT_PIN6 PIN_B5 // Pin 14
 #define OUTPUT_PIN7 PIN_B4 // Pin 13
-#define SHIT_TO_UPPER_CASE 0x20
+#define SHIFT_TO_UPPER_CASE 0x20
 #define SINGLE_QUOTE 0x27
 
 #define DEFAULT_KEY_DELAY 0x5A
@@ -128,69 +128,6 @@ bool altEnabled = false;
 bool ctrlEnabled = false;
 bool cbmEnabled = false;
 bool controlSent = false;
-
-// Arduino method - run before the controller loop starts
-void setup()
-{
-    Keyboard.begin();
-}
-
-// Main Arduino controller loop
-void loop()
-{
-    // Fills kpd.key[ ] array with up-to 10 active keys.
-    // Returns true if there are ANY active keys.
-    if (kpd.getKeys())
-    {
-        for (int i = 0; i < LIST_MAX; i++) // Scan the whole key list.
-        {
-            // Possible states are : IDLE, PRESSED, HOLD, or RELEASED
-            if (kpd.key[i].stateChanged) // Only find keys that have changed state.
-            {
-                if (IsModifierKey(kpd.key[i].kchar))
-                {
-                    setModifierStatus(kpd.key[i].kchar, kpd.key[i].kstate);
-                }
-
-                if ((kpd.key[i].kstate == PRESSED) && (IsAlphanumericKey(kpd.key[i].kchar)) && ctrlEnabled && !controlSent)
-                {
-                    controlSent = SendControlKeyCombinations(kpd.key[i].kchar);
-                    if (controlSent)
-                    {
-                        WaitForKeyPress();
-                        controlSent = false;
-                    }
-                }
-                else if (kpd.key[i].kstate == RELEASED)
-                {
-                    if (IsAlphanumericKey(kpd.key[i].kchar))
-                    {
-                        Keyboard.print(trueKey(kpd.key[i].kchar));
-                    }
-                    else if (kpd.key[i].kchar == _RETURN)
-                    {
-                        Keyboard.println("");
-                    }
-                    else if (IsCursorKey(kpd.key[i].kchar))
-                    {
-                        SendCursorKey(kpd.key[i].kchar);
-                    }
-                    else if (kpd.key[i].kchar == _INSERT_DELETE)
-                    {
-                        SendDelete(kpd.key[i].kchar);
-                    }
-                    else if (kpd.key[i].kchar == _POUND)
-                    {
-                        SendPoundSign();
-                    }
-                    else if (IsFunctionKey(kpd.key[i].kchar))
-                    {
-                        SendFunctionKey(kpd.key[i].kchar);
-                    }
-                }
-            }
-        }
-    }
 
 
 /*
@@ -563,3 +500,72 @@ void SendAsControl(char _key)
     controlSent = true;
     ctrlEnabled = false;
 }
+
+// Arduino method - run before the controller loop starts
+void setup()
+{
+    Keyboard.begin();
+}
+
+// Main Arduino controller loop
+void loop()
+{
+    // Fills kpd.key[ ] array with up-to 10 active keys.
+    // Returns true if there are ANY active keys.
+    if (kpd.getKeys())
+    {
+        for (int i = 0; i < LIST_MAX; i++) // Scan the whole key list.
+        {
+            // Possible states are : IDLE, PRESSED, HOLD, or RELEASED
+            if (kpd.key[i].stateChanged) // Only find keys that have changed state.
+            {
+                if (IsModifierKey(kpd.key[i].kchar))
+                {
+                    setModifierStatus(kpd.key[i].kchar, kpd.key[i].kstate);
+                }
+
+                if ((kpd.key[i].kstate == PRESSED) && (IsAlphanumericKey(kpd.key[i].kchar)) && ctrlEnabled && !controlSent)
+                {
+                    controlSent = SendControlKeyCombinations(kpd.key[i].kchar);
+                    if (controlSent)
+                    {
+                        WaitForKeyPress();
+                        controlSent = false;
+                    }
+                }
+                else if (kpd.key[i].kstate == RELEASED)
+                {
+                    if (IsAlphanumericKey(kpd.key[i].kchar))
+                    {
+                        Keyboard.print(trueKey(kpd.key[i].kchar));
+                    }
+                    else if (kpd.key[i].kchar == _RETURN)
+                    {
+                        Keyboard.println("");
+                    }
+                    else if (IsCursorKey(kpd.key[i].kchar))
+                    {
+                        SendCursorKey(kpd.key[i].kchar);
+                    }
+                    else if (kpd.key[i].kchar == _INSERT_DELETE)
+                    {
+                        SendDelete(kpd.key[i].kchar);
+                    }
+                    else if (kpd.key[i].kchar == _POUND)
+                    {
+                        SendPoundSign();
+                    }
+                    else if (IsFunctionKey(kpd.key[i].kchar))
+                    {
+                        SendFunctionKey(kpd.key[i].kchar);
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
